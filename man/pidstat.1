@@ -4,7 +4,7 @@
 pidstat \- Report statistics for Linux tasks.
 
 .SH SYNOPSIS
-.B pidstat [ \-d ] [ \-H ] [ \-h ] [ \-I ] [ \-l ] [ \-R ] [ \-r ] [ \-s ] [ \-t ] [ \-U [
+.B pidstat [ \--csv ] [ \-d ] [ \-H ] [ \-h ] [ \-I ] [ --no-header ] [ \-l ] [ \-R ] [ \-r ] [ \-s ] [ \-t ] [ \-U [
 .IB "username " "] ] [ \-u ] [ \-V ] [ \-v ] [ \-w ] [ \-C " "comm " "] [ \-G " "process_name"
 .BI "] [ \-\-dec={ 0 | 1 | 2 } ] [ \-\-human ] [ \-p { " "pid" "[,...]"
 .B | SELF | ALL } ] [ \-T { TASK | CHILD | ALL } ] [
@@ -45,6 +45,9 @@ You can select information about specific task activities using flags.
 Not specifying any flags selects only CPU activity.
 
 .SH OPTIONS
+.TP
+.B \--csv
+Output with CSV format. It can only be used when -h is used.
 .TP
 .BI "\-C " "comm"
 Display only tasks whose command name includes the string
@@ -121,6 +124,9 @@ should be divided by the total number of processors.
 .TP
 .B \-l
 Display the process command name and all its arguments.
+.TP
+.B \--no-header
+Do not display any header. It can only be used when both -h and --csv are used.
 .TP
 .BI "\-p { " "pid" "[,...] | SELF | ALL }"
 Select tasks (processes) for which statistics are to be reported.

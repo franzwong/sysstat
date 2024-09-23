@@ -71,6 +71,8 @@
 #define P_D_UNIT	0x0800
 #define P_D_SEC_EPOCH	0x1000
 #define P_F_EXEC_PGM	0x2000
+#define P_D_CSV			0x4000
+#define P_D_NO_HEADER	0x8000
 
 #define DISPLAY_PID(m)		(((m) & P_D_PID) == P_D_PID)
 #define DISPLAY_ALL_PID(m)	(((m) & P_D_ALL_PID) == P_D_ALL_PID)
@@ -86,6 +88,8 @@
 #define DISPLAY_UNIT(m)		(((m) & P_D_UNIT) == P_D_UNIT)
 #define PRINT_SEC_EPOCH(m)	(((m) & P_D_SEC_EPOCH) == P_D_SEC_EPOCH)
 #define EXEC_PGM(m)		(((m) & P_F_EXEC_PGM) == P_F_EXEC_PGM)
+#define DISPLAY_CSV(m)		(((m) & P_D_CSV) == P_D_CSV && ((m) & P_D_ONELINE) == P_D_ONELINE)
+#define NO_HEADER(m)		(((m) & P_D_NO_HEADER) == P_D_NO_HEADER && ((m) & P_D_CSV) == P_D_CSV && ((m) & P_D_ONELINE) == P_D_ONELINE)
 
 /* Per-process flags */
 #define F_NO_PID_IO	0x01
@@ -116,21 +120,37 @@
 #define TASK_SMAP	PRE "/proc/%u/task/%u/smaps"
 #define TASK_FD		PRE "/proc/%u/task/%u/fd"
 
-#define PRINT_ID_HDR(_timestamp_, _flag_)	do {						\
-							printf("\n%-11s", _timestamp_);	\
-							if (DISPLAY_USERNAME(_flag_)) {		\
-								printf("     USER");		\
-							}					\
-							else {					\
-								printf("   UID");		\
-							}					\
-   							if (DISPLAY_TID(_flag_)) {		\
-								printf("      TGID       TID");	\
-							}					\
-							else {					\
-								printf("       PID");		\
-							}					\
-						} while (0)
+#define PRINT_ID_HDR(_timestamp_, _flag_)	 do {											\
+													printf("\n%-11s", _timestamp_);			\
+													if (DISPLAY_USERNAME(_flag_)) {         \
+															printf("     USER");            \
+													}                                       \
+													else {                                  \
+															printf("   UID");               \
+													}                                       \
+													if (DISPLAY_TID(_flag_)) {              \
+															printf("      TGID       TID"); \
+													}                                       \
+													else {                                  \
+															printf("       PID");           \
+													}                                       \
+											} while (0)
+
+#define PRINT_ID_HDR_CSV(_timestamp_, _flag_)	do {								\
+													printf("\n%s", _timestamp_);	\
+													if (DISPLAY_USERNAME(_flag_)) {	\
+														printf(",USER");			\
+													}								\
+													else {							\
+														printf(",UID");				\
+													}								\
+													if (DISPLAY_TID(_flag_)) {		\
+														printf(",TGID,TID");		\
+													}								\
+													else {							\
+														printf(",PID");				\
+													}								\
+												} while (0)							\
 
 /* Normally defined in <linux/sched.h> */
 #ifndef SCHED_NORMAL

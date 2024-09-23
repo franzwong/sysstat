@@ -312,14 +312,22 @@ int count_bits
 	(void *, int);
 int count_csvalues
 	(int, char **);
+void csv_printf_f
+	(int, int, ...);
 void cprintf_f
 	(int, int, int, int, int, ...);
+void csv_printf_in
+	(int, char *, char *, int);
 void cprintf_in
 	(int, char *, char *, int);
+void csv_printf_xpc
+	(int, int, ...);
 void cprintf_xpc
 	(int, int, int, int, int, ...);
 void cprintf_s
 	(int, char *, char *);
+void csv_printf_u64
+	(int, ...);
 void cprintf_u64
 	(int, int, int, ...);
 void cprintf_x

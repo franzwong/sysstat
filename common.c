@@ -1327,6 +1327,22 @@ void cprintf_unit(int unit, int wi, double dval)
 	printf("%c", units[unit]);
 }
 
+void csv_printf_u64(int num, ...)
+{
+	int i;
+	uint64_t val;
+	va_list args;
+
+	va_start(args, num);
+
+	for (i = 0; i < num; i++) {
+		val = va_arg(args, unsigned long long);
+		printf(",%"PRIu64, val);
+	}
+
+	va_end(args);
+}
+
 /*
  ***************************************************************************
  * Print 64 bit unsigned values using colors, possibly followed by a unit.
@@ -1387,6 +1403,30 @@ void cprintf_x(int num, int wi, ...)
 		printf("%s", sc_int_stat);
 		printf(" %*x", wi, val);
 		printf("%s", sc_normal);
+	}
+
+	va_end(args);
+}
+
+void csv_printf_f(int num, int wd, ...)
+{
+	int i;
+	double val;
+	va_list args;
+
+	/*
+	 * If there are decimal places then get the value
+	 * entered on the command line (if existing).
+	 */
+	if ((wd > 0) && (dplaces_nr >= 0)) {
+		wd = dplaces_nr;
+	}
+
+	va_start(args, wd);
+
+	for (i = 0; i < num; i++) {
+		val = va_arg(args, double);
+		printf(",%0.*f", wd, val);
 	}
 
 	va_end(args);
@@ -1454,6 +1494,30 @@ void cprintf_f(int unit, int sign, int num, int wi, int wd, ...)
 		else {
 			cprintf_unit(unit, wi, val);
 		}
+	}
+
+	va_end(args);
+}
+
+void csv_printf_xpc(int num, int wd, ...)
+{
+	int i;
+	double val;
+	va_list args;
+
+	/*
+	 * If there are decimal places then get the value
+	 * entered on the command line (if existing).
+	 */
+	if ((wd > 0) && (dplaces_nr >= 0)) {
+		wd = dplaces_nr;
+	}
+
+	va_start(args, wd);
+
+	for (i = 0; i < num; i++) {
+		val = va_arg(args, double);
+		printf(",%0.*f", wd, val);
 	}
 
 	va_end(args);
@@ -1544,6 +1608,16 @@ void cprintf_xpc(int human, int xtrem, int num, int wi, int wd, ...)
 	}
 
 	va_end(args);
+}
+
+void csv_printf_in(int type, char *format, char *item_string, int item_int)
+{
+	if (type) {
+		printf(format, item_string);
+	}
+	else {
+		printf(format, item_int);
+	}
 }
 
 /*

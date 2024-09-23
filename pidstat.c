@@ -99,7 +99,7 @@ void usage(char *progname)
 			  "[ -d ] [ -H ] [ -h ] [ -I ] [ -l ] [ -R ] [ -r ] [ -s ] [ -t ] [ -U [ <username> ] ]\n"
 			  "[ -u ] [ -V ] [ -v ] [ -w ] [ -C <command> ] [ -G <process_name> ]\n"
 			  "[ -p { <pid> [,...] | SELF | ALL } ] [ -T { TASK | CHILD | ALL } ]\n"
-			  "[ --dec={ 0 | 1 | 2 } ] [ --human ]\n"));
+			  "[ --dec={ 0 | 1 | 2 } ] [ --human ] [ --csv] \n"));
 	exit(1);
 }
 
@@ -383,19 +383,32 @@ void print_comm(struct st_pid *plist)
 
 	if (plist->tgid) {
 		if (IS_PID_DISPLAYED(plist->tgid->flags)) {
-			cprintf_s(IS_ZERO, "  |__%s\n", p);
+			if (DISPLAY_CSV(pidflag)) {
+				printf(",%s\n", p);
+			} else {
+				cprintf_s(IS_ZERO, "  |__%s\n", p);
+			}
 		}
 		else {
-			/* Its TGID has not been displayed */
-			cprintf_s(IS_STR, "  (%s)", plist->tgid->comm);
-			cprintf_s(IS_ZERO, "__%s\n", p);
+			if (DISPLAY_CSV(pidflag)) {
+				printf(",(%s)", plist->tgid->comm);
+				printf("__%s\n", p);
+			} else {
+				/* Its TGID has not been displayed */
+				cprintf_s(IS_STR, "  (%s)", plist->tgid->comm);
+				cprintf_s(IS_ZERO, "__%s\n", p);
+			}
 
 			/* We can now consider this has been the case */
 			plist->tgid->flags |= F_PID_DISPLAYED;
 		}
 	}
 	else {
-		cprintf_s(IS_STR, "  %s\n", p);
+		if (DISPLAY_CSV(pidflag)) {
+			printf(",%s\n", p);
+		} else {
+			cprintf_s(IS_STR, "  %s\n", p);
+		}
 	}
 }
 
@@ -1240,10 +1253,18 @@ void __print_line_id(struct st_pid *plist, char c)
 	struct passwd *pwdent;
 
 	if (DISPLAY_USERNAME(pidflag) && ((pwdent = __getpwuid(plist->uid)) != NULL)) {
-		cprintf_in(IS_STR, " %8s", pwdent->pw_name, 0);
+		if (DISPLAY_CSV(pidflag)) {
+			csv_printf_in(IS_STR, ",%s", pwdent->pw_name, 0);
+		} else {
+			cprintf_in(IS_STR, " %8s", pwdent->pw_name, 0);
+		}
 	}
 	else {
-		cprintf_in(IS_INT, " %5d", "", plist->uid);
+		if (DISPLAY_CSV(pidflag)) {
+			csv_printf_in(IS_INT, ",%d", "", plist->uid);
+		} else {
+			cprintf_in(IS_INT, " %5d", "", plist->uid);
+		}
 	}
 
 	if (DISPLAY_TID(pidflag)) {
@@ -1251,23 +1272,44 @@ void __print_line_id(struct st_pid *plist, char c)
 		if (plist->tgid) {
 			/* This is a TID */
 			if (IS_PID_DISPLAYED(plist->tgid->flags)) {
-				sprintf(format, "         %c %%9u", c);
+				if (DISPLAY_CSV(pidflag)) {
+					sprintf(format, ",%c,%%u", c);
+				} else {
+					sprintf(format, "         %c %%9u", c);
+				}
 			}
 			else {
-				strcpy(format, " %9u");
-				cprintf_in(IS_INT, format, "", plist->tgid->pid);
+				if (DISPLAY_CSV(pidflag)) {
+					strcpy(format, ",%u");
+					csv_printf_in(IS_INT, format, "", plist->tgid->pid);
+				} else {
+					strcpy(format, " %9u");
+					cprintf_in(IS_INT, format, "", plist->tgid->pid);
+				}
 			}
 		}
 		else {
 			/* This is a PID (TGID) */
-			sprintf(format, " %%9u         %c", c);
+			if (DISPLAY_CSV(pidflag)) {
+				sprintf(format, ",%%u,%c", c);
+			} else {
+				sprintf(format, " %%9u         %c", c);
+			}
 		}
 	}
 	else {
-		strcpy(format, " %9u");
+		if (DISPLAY_CSV(pidflag)) {
+			strcpy(format, ",%u");
+		} else {
+			strcpy(format, " %9u");
+		}
 	}
 
-	cprintf_in(IS_INT, format, "", plist->pid);
+	if (DISPLAY_CSV(pidflag)) {
+		csv_printf_in(IS_INT, format, "", plist->pid);
+	} else {
+		cprintf_in(IS_INT, format, "", plist->pid);
+	}
 }
 
 /*
@@ -1281,8 +1323,13 @@ void __print_line_id(struct st_pid *plist, char c)
  */
 void print_line_id(char *timestamp, struct st_pid *plist)
 {
-	printf("%-11s", timestamp);
-	__print_line_id(plist, '-');
+	if (DISPLAY_CSV(pidflag)) {
+		printf("%s", timestamp);
+		__print_line_id(plist, '-');
+	} else {
+		printf("%-11s", timestamp);
+		__print_line_id(plist, '-');
+	}
 }
 
 /*
@@ -1317,29 +1364,59 @@ int write_pid_task_all_stats(int prev, int curr, int dis,
 	int again = 0;
 
 	if (dis) {
-		PRINT_ID_HDR(prev_string, pidflag);
-		if (DISPLAY_CPU(actflag)) {
-			printf("    %%usr %%system  %%guest   %%wait    %%CPU   CPU");
+		if (DISPLAY_CSV(pidflag)) {
+			if (!NO_HEADER(pidflag)) {
+				PRINT_ID_HDR_CSV(prev_string, pidflag);
+				if (DISPLAY_CPU(actflag)) {
+					printf(",%%usr,%%system,%%guest,%%wait,%%CPU,CPU");
+				}
+				if (DISPLAY_MEM(actflag)) {
+					printf(",minflt/s,majflt/s,VSZ,RSS,%%MEM");
+				}
+				if (DISPLAY_STACK(actflag)) {
+					printf(",StkSize,StkRef");
+				}
+				if (DISPLAY_IO(actflag)) {
+					printf(",kB_rd/s,kB_wr/s,kB_ccwr/s,iodelay");
+				}
+				if (DISPLAY_CTXSW(actflag)) {
+					printf(",cswch/s,nvcswch/s");
+				}
+				if (DISPLAY_KTAB(actflag)) {
+					printf(",threads,fd-nr");
+				}
+				if (DISPLAY_RT(actflag)) {
+					printf(",prio,policy");
+				}
+				printf(",Command\n");
+			}
+		} else {
+			if (!NO_HEADER(pidflag)) {
+				PRINT_ID_HDR(prev_string, pidflag);
+				if (DISPLAY_CPU(actflag)) {
+						printf("    %%usr %%system  %%guest   %%wait    %%CPU   CPU");
+				}
+				if (DISPLAY_MEM(actflag)) {
+						printf("  minflt/s  majflt/s     VSZ     RSS   %%MEM");
+				}
+				if (DISPLAY_STACK(actflag)) {
+						printf(" StkSize  StkRef");
+				}
+				if (DISPLAY_IO(actflag)) {
+						printf("   kB_rd/s   kB_wr/s kB_ccwr/s iodelay");
+				}
+				if (DISPLAY_CTXSW(actflag)) {
+						printf("   cswch/s nvcswch/s");
+				}
+				if (DISPLAY_KTAB(actflag)) {
+						printf(" threads   fd-nr");
+				}
+				if (DISPLAY_RT(actflag)) {
+						printf(" prio policy");
+				}
+				printf("  Command\n");
+			}
 		}
-		if (DISPLAY_MEM(actflag)) {
-			printf("  minflt/s  majflt/s     VSZ     RSS   %%MEM");
-		}
-		if (DISPLAY_STACK(actflag)) {
-			printf(" StkSize  StkRef");
-		}
-		if (DISPLAY_IO(actflag)) {
-			printf("   kB_rd/s   kB_wr/s kB_ccwr/s iodelay");
-		}
-		if (DISPLAY_CTXSW(actflag)) {
-			printf("   cswch/s nvcswch/s");
-		}
-		if (DISPLAY_KTAB(actflag)) {
-			printf(" threads   fd-nr");
-		}
-		if (DISPLAY_RT(actflag)) {
-			printf(" prio policy");
-		}
-		printf("  Command\n");
 	}
 
 	for (plist = pid_list; plist != NULL; plist = plist->next) {
@@ -1353,39 +1430,75 @@ int write_pid_task_all_stats(int prev, int curr, int dis,
 		pstp = plist->pstats[prev];
 
 		if (DISPLAY_CPU(actflag)) {
-			cprintf_xpc(DISPLAY_UNIT(pidflag), XHIGH, 5, 7, 2,
-				   (pstc->utime - pstc->gtime) < (pstp->utime - pstp->gtime) ?
-				   0.0 :
-				   SP_VALUE(pstp->utime - pstp->gtime,
-					    pstc->utime - pstc->gtime, itv * HZ / 100),
-				   SP_VALUE(pstp->stime,  pstc->stime, itv * HZ / 100),
-				   SP_VALUE(pstp->gtime,  pstc->gtime, itv * HZ / 100),
-				   SP_VALUE(pstp->wtime,  pstc->wtime, itv * HZ / 100),
-				   /* User time already includes guest time */
-				   IRIX_MODE_OFF(pidflag) ?
-				   SP_VALUE(pstp->utime + pstp->stime,
-					    pstc->utime + pstc->stime, deltot_jiffies) :
-				   SP_VALUE(pstp->utime + pstp->stime,
-					    pstc->utime + pstc->stime, itv * HZ / 100));
+			if (DISPLAY_CSV(pidflag)) {
+				csv_printf_xpc(5, 2,
+					(pstc->utime - pstc->gtime) < (pstp->utime - pstp->gtime) ?
+					0.0 :
+					SP_VALUE(pstp->utime - pstp->gtime,
+							pstc->utime - pstc->gtime, itv * HZ / 100),
+					SP_VALUE(pstp->stime,  pstc->stime, itv * HZ / 100),
+					SP_VALUE(pstp->gtime,  pstc->gtime, itv * HZ / 100),
+					SP_VALUE(pstp->wtime,  pstc->wtime, itv * HZ / 100),
+					/* User time already includes guest time */
+					IRIX_MODE_OFF(pidflag) ?
+					SP_VALUE(pstp->utime + pstp->stime,
+							pstc->utime + pstc->stime, deltot_jiffies) :
+					SP_VALUE(pstp->utime + pstp->stime,
+							pstc->utime + pstc->stime, itv * HZ / 100));
 
-			cprintf_in(IS_INT, "   %3d", "", pstc->processor);
+				csv_printf_in(IS_INT, ",%d", "", pstc->processor);
+			} else {
+				cprintf_xpc(DISPLAY_UNIT(pidflag), XHIGH, 5, 7, 2,
+					(pstc->utime - pstc->gtime) < (pstp->utime - pstp->gtime) ?
+					0.0 :
+					SP_VALUE(pstp->utime - pstp->gtime,
+							pstc->utime - pstc->gtime, itv * HZ / 100),
+					SP_VALUE(pstp->stime,  pstc->stime, itv * HZ / 100),
+					SP_VALUE(pstp->gtime,  pstc->gtime, itv * HZ / 100),
+					SP_VALUE(pstp->wtime,  pstc->wtime, itv * HZ / 100),
+					/* User time already includes guest time */
+					IRIX_MODE_OFF(pidflag) ?
+					SP_VALUE(pstp->utime + pstp->stime,
+							pstc->utime + pstc->stime, deltot_jiffies) :
+					SP_VALUE(pstp->utime + pstp->stime,
+							pstc->utime + pstc->stime, itv * HZ / 100));
+
+				cprintf_in(IS_INT, "   %3d", "", pstc->processor);
+			}
 		}
 
 		if (DISPLAY_MEM(actflag)) {
-			cprintf_f(NO_UNIT, FALSE, 2, 9, 2,
-				  S_VALUE(pstp->minflt, pstc->minflt, itv),
-				  S_VALUE(pstp->majflt, pstc->majflt, itv));
-			cprintf_u64(DISPLAY_UNIT(pidflag) ? UNIT_KILOBYTE : NO_UNIT, 2, 7,
-				    (unsigned long long) pstc->vsz,
-				    (unsigned long long) pstc->rss);
-			cprintf_xpc(DISPLAY_UNIT(pidflag), XHIGH, 1, 6, 2,
-				   tlmkb ? SP_VALUE(0, pstc->rss, tlmkb) : 0.0);
+			if (DISPLAY_CSV(pidflag)) {
+				csv_printf_f(2, 2,
+					S_VALUE(pstp->minflt, pstc->minflt, itv),
+					S_VALUE(pstp->majflt, pstc->majflt, itv));
+				csv_printf_u64(2,
+						(unsigned long long) pstc->vsz,
+						(unsigned long long) pstc->rss);
+				csv_printf_xpc(1, 2,
+					tlmkb ? SP_VALUE(0, pstc->rss, tlmkb) : 0.0);
+			} else {
+				cprintf_f(NO_UNIT, FALSE, 2, 9, 2,
+					S_VALUE(pstp->minflt, pstc->minflt, itv),
+					S_VALUE(pstp->majflt, pstc->majflt, itv));
+				cprintf_u64(DISPLAY_UNIT(pidflag) ? UNIT_KILOBYTE : NO_UNIT, 2, 7,
+						(unsigned long long) pstc->vsz,
+						(unsigned long long) pstc->rss);
+				cprintf_xpc(DISPLAY_UNIT(pidflag), XHIGH, 1, 6, 2,
+					tlmkb ? SP_VALUE(0, pstc->rss, tlmkb) : 0.0);
+			}
 		}
 
 		if (DISPLAY_STACK(actflag)) {
-			cprintf_u64(DISPLAY_UNIT(pidflag) ? UNIT_KILOBYTE : NO_UNIT, 2, 7,
-				    (unsigned long long) pstc->stack_size,
-				    (unsigned long long) pstc->stack_ref);
+			if (DISPLAY_CSV(pidflag)) {
+				csv_printf_u64(2,
+						(unsigned long long) pstc->stack_size,
+						(unsigned long long) pstc->stack_ref);
+			} else {
+				cprintf_u64(DISPLAY_UNIT(pidflag) ? UNIT_KILOBYTE : NO_UNIT, 2, 7,
+						(unsigned long long) pstc->stack_size,
+						(unsigned long long) pstc->stack_ref);
+			}
 		}
 
 		if (DISPLAY_IO(actflag)) {
@@ -1402,45 +1515,80 @@ int write_pid_task_all_stats(int prev, int curr, int dis,
 					wbytes /= 1024;
 					cbytes /= 1024;
 				}
-				cprintf_f(DISPLAY_UNIT(pidflag) ? UNIT_BYTE : NO_UNIT, FALSE, 3, 9, 2,
-					  rbytes, wbytes, cbytes);
+				if (DISPLAY_CSV(pidflag)) {
+					csv_printf_f(3, 2, rbytes, wbytes, cbytes);
+				} else {
+					cprintf_f(DISPLAY_UNIT(pidflag) ? UNIT_BYTE : NO_UNIT, FALSE, 3, 9, 2,
+						rbytes, wbytes, cbytes);
+				}
 			}
 			else {
-				/*
-				 * Keep the layout even though this task has no I/O
-				 * typically threads with no I/O measurements.
-				 */
-				sprintf(dstr, " %9.2f %9.2f %9.2f", -1.0, -1.0, -1.0);
-				cprintf_s(IS_ZERO, "%s", dstr);
+				if (DISPLAY_CSV(pidflag)) {
+					csv_printf_f(3, 2, -1.0, -1.0, -1.0);
+				} else {
+					/*
+					* Keep the layout even though this task has no I/O
+					* typically threads with no I/O measurements.
+					*/
+					sprintf(dstr, " %9.2f %9.2f %9.2f", -1.0, -1.0, -1.0);
+					cprintf_s(IS_ZERO, "%s", dstr);
+				}
 			}
 			/* I/O delays come from another file (/proc/#/stat) */
-			cprintf_u64(NO_UNIT, 1, 7,
-				    (unsigned long long) (pstc->blkio_swapin_delays - pstp->blkio_swapin_delays));
+			if (DISPLAY_CSV(pidflag)) {
+				csv_printf_u64(1,
+					    (unsigned long long) (pstc->blkio_swapin_delays - pstp->blkio_swapin_delays));
+			} else {
+				cprintf_u64(NO_UNIT, 1, 7,
+					    (unsigned long long) (pstc->blkio_swapin_delays - pstp->blkio_swapin_delays));
+			}
 		}
 
 		if (DISPLAY_CTXSW(actflag)) {
-			cprintf_f(NO_UNIT, FALSE, 2, 9, 2,
-				  S_VALUE(pstp->nvcsw, pstc->nvcsw, itv),
-				  S_VALUE(pstp->nivcsw, pstc->nivcsw, itv));
+			if (DISPLAY_CSV(pidflag)) {
+				csv_printf_f(2, 2,
+					S_VALUE(pstp->nvcsw, pstc->nvcsw, itv),
+					S_VALUE(pstp->nivcsw, pstc->nivcsw, itv));
+			} else {
+				cprintf_f(NO_UNIT, FALSE, 2, 9, 2,
+					S_VALUE(pstp->nvcsw, pstc->nvcsw, itv),
+					S_VALUE(pstp->nivcsw, pstc->nivcsw, itv));
+			}
 		}
 
 		if (DISPLAY_KTAB(actflag)) {
-			cprintf_u64(NO_UNIT, 1, 7,
-				    (unsigned long long) pstc->threads);
-			if (NO_PID_FD(plist->flags)) {
-				/* /proc/#/fd directory not readable */
-				cprintf_s(IS_ZERO, " %7s", "-1");
-			}
-			else {
-				cprintf_u64(NO_UNIT, 1, 7, (unsigned long long) pstc->fd_nr);
+			if (DISPLAY_CSV(pidflag)) {
+				csv_printf_u64(1, (unsigned long long) pstc->threads);
+				if (NO_PID_FD(plist->flags)) {
+					/* /proc/#/fd directory not readable */
+					printf(",%s", "-1");
+				}
+				else {
+					csv_printf_u64(1, (unsigned long long) pstc->fd_nr);
+				}
+			} else {
+				cprintf_u64(NO_UNIT, 1, 7,
+						(unsigned long long) pstc->threads);
+				if (NO_PID_FD(plist->flags)) {
+					/* /proc/#/fd directory not readable */
+					cprintf_s(IS_ZERO, " %7s", "-1");
+				}
+				else {
+					cprintf_u64(NO_UNIT, 1, 7, (unsigned long long) pstc->fd_nr);
+				}
 			}
 		}
 
 		if (DISPLAY_RT(actflag)) {
-			cprintf_u64(NO_UNIT, 1, 4,
-				    (unsigned long long) pstc->priority);
-			cprintf_s(IS_STR, " %6s",
-				  GET_POLICY(pstc->policy));
+			if (DISPLAY_CSV(pidflag)) {
+				csv_printf_u64(1, (unsigned long long) pstc->priority);
+				printf("%s", GET_POLICY(pstc->policy));
+			} else {
+				cprintf_u64(NO_UNIT, 1, 4,
+						(unsigned long long) pstc->priority);
+				cprintf_s(IS_STR, " %6s",
+					GET_POLICY(pstc->policy));
+			}
 		}
 
 		print_comm(plist);
@@ -1476,12 +1624,21 @@ int write_pid_child_all_stats(int prev, int curr, int dis,
 	int again = 0;
 
 	if (dis) {
-		PRINT_ID_HDR(prev_string, pidflag);
-		if (DISPLAY_CPU(actflag))
-			printf("    usr-ms system-ms  guest-ms");
-		if (DISPLAY_MEM(actflag))
-			printf(" minflt-nr majflt-nr");
-		printf("  Command\n");
+		if (DISPLAY_CSV(pidflag)) {
+			PRINT_ID_HDR_CSV(prev_string, pidflag);
+			if (DISPLAY_CPU(actflag))
+				printf(",usr-ms,system-ms,guest-ms");
+			if (DISPLAY_MEM(actflag))
+				printf(",minflt-nr,majflt-nr");
+			printf(",Command\n");
+		} else {
+			PRINT_ID_HDR(prev_string, pidflag);
+			if (DISPLAY_CPU(actflag))
+				printf("    usr-ms system-ms  guest-ms");
+			if (DISPLAY_MEM(actflag))
+				printf(" minflt-nr majflt-nr");
+			printf("  Command\n");
+		}
 	}
 
 	for (plist = pid_list; plist != NULL; plist = plist->next) {
@@ -1495,23 +1652,43 @@ int write_pid_child_all_stats(int prev, int curr, int dis,
 		pstp = plist->pstats[prev];
 
 		if (DISPLAY_CPU(actflag)) {
-			cprintf_f(NO_UNIT, FALSE, 3, 9, 0,
-				  (pstc->utime + pstc->cutime - pstc->gtime - pstc->cgtime) <
-				  (pstp->utime + pstp->cutime - pstp->gtime - pstp->cgtime) ?
-				  0.0 :
-				  (double) ((pstc->utime + pstc->cutime - pstc->gtime - pstc->cgtime) -
-					    (pstp->utime + pstp->cutime - pstp->gtime - pstp->cgtime)) /
-					    HZ * 1000,
-				  (double) ((pstc->stime + pstc->cstime) -
-					    (pstp->stime + pstp->cstime)) / HZ * 1000,
-				  (double) ((pstc->gtime + pstc->cgtime) -
-					    (pstp->gtime + pstp->cgtime)) / HZ * 1000);
+			if (DISPLAY_CSV(pidflag)) {
+				csv_printf_f(3, 0,
+					(pstc->utime + pstc->cutime - pstc->gtime - pstc->cgtime) <
+					(pstp->utime + pstp->cutime - pstp->gtime - pstp->cgtime) ?
+					0.0 :
+					(double) ((pstc->utime + pstc->cutime - pstc->gtime - pstc->cgtime) -
+							(pstp->utime + pstp->cutime - pstp->gtime - pstp->cgtime)) /
+							HZ * 1000,
+					(double) ((pstc->stime + pstc->cstime) -
+							(pstp->stime + pstp->cstime)) / HZ * 1000,
+					(double) ((pstc->gtime + pstc->cgtime) -
+							(pstp->gtime + pstp->cgtime)) / HZ * 1000);
+			} else {
+				cprintf_f(NO_UNIT, FALSE, 3, 9, 0,
+					(pstc->utime + pstc->cutime - pstc->gtime - pstc->cgtime) <
+					(pstp->utime + pstp->cutime - pstp->gtime - pstp->cgtime) ?
+					0.0 :
+					(double) ((pstc->utime + pstc->cutime - pstc->gtime - pstc->cgtime) -
+							(pstp->utime + pstp->cutime - pstp->gtime - pstp->cgtime)) /
+							HZ * 1000,
+					(double) ((pstc->stime + pstc->cstime) -
+							(pstp->stime + pstp->cstime)) / HZ * 1000,
+					(double) ((pstc->gtime + pstc->cgtime) -
+							(pstp->gtime + pstp->cgtime)) / HZ * 1000);
+			}
 		}
 
 		if (DISPLAY_MEM(actflag)) {
-			cprintf_u64(NO_UNIT, 2, 9,
+			if (DISPLAY_CSV(pidflag)) {
+				csv_printf_u64(2,
 				    (unsigned long long) ((pstc->minflt + pstc->cminflt) - (pstp->minflt + pstp->cminflt)),
 				    (unsigned long long) ((pstc->majflt + pstc->cmajflt) - (pstp->majflt + pstp->cmajflt)));
+			} else {
+				cprintf_u64(NO_UNIT, 2, 9,
+						(unsigned long long) ((pstc->minflt + pstc->cminflt) - (pstp->minflt + pstp->cminflt)),
+						(unsigned long long) ((pstc->majflt + pstc->cmajflt) - (pstp->majflt + pstp->cmajflt)));
+			}
 		}
 
 		print_comm(plist);
@@ -2343,7 +2520,11 @@ int write_stats(int curr, int dis)
 
 	/* Get previous timestamp */
 	if (DISPLAY_ONELINE(pidflag)) {
-		strcpy(cur_time[!curr], "# Time     ");
+		if (DISPLAY_CSV(pidflag)) {
+			strcpy(cur_time[!curr], "# Time");
+		} else {
+			strcpy(cur_time[!curr], "# Time     ");
+		}
 	}
 	else if (PRINT_SEC_EPOCH(pidflag)) {
 		snprintf(cur_time[!curr], sizeof(cur_time[!curr]), "%-11ld", mktime(&ps_tstamp[!curr]));
@@ -2358,7 +2539,11 @@ int write_stats(int curr, int dis)
 
 	/* Get current timestamp */
 	if (PRINT_SEC_EPOCH(pidflag)) {
-		snprintf(cur_time[curr], sizeof(cur_time[curr]), "%-11ld", mktime(&ps_tstamp[curr]));
+		if (DISPLAY_CSV(pidflag)) {
+			snprintf(cur_time[curr], sizeof(cur_time[curr]), "%ld", mktime(&ps_tstamp[curr]));
+		} else {
+			snprintf(cur_time[curr], sizeof(cur_time[curr]), "%-11ld", mktime(&ps_tstamp[curr]));	
+		}
 		cur_time[curr][sizeof(cur_time[curr]) - 1] = '\0';
 	}
 	else if (is_iso_time_fmt()) {
@@ -2641,6 +2826,14 @@ int main(int argc, char **argv)
 			pidflag |= P_D_UNIT;
 			opt++;
 		}
+		else if (!strcmp(argv[opt], "--csv")) {
+			pidflag |= P_D_CSV;
+			opt++;
+		}
+		else if (!strcmp(argv[opt], "--no-header")) {
+			pidflag |= P_D_NO_HEADER;
+			opt++;
+		}
 
 #ifdef TEST
 		else if (!strncmp(argv[opt], "--getenv", 8)) {
@@ -2860,10 +3053,12 @@ int main(int argc, char **argv)
 	setbuf(stdout, NULL);
 
 	/* Get system name, release number and hostname */
-	__uname(&header);
-	print_gal_header(&(ps_tstamp[0]), header.sysname, header.release,
-			 header.nodename, header.machine, cpu_nr,
-			 PLAIN_OUTPUT);
+	if (!NO_HEADER(pidflag)) {
+		__uname(&header);
+		print_gal_header(&(ps_tstamp[0]), header.sysname, header.release,
+				header.nodename, header.machine, cpu_nr,
+				PLAIN_OUTPUT);
+	}
 
 	/* Main loop */
 	rw_pidstat_loop(dis_hdr, rows);
